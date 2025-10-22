@@ -3,6 +3,7 @@ import multer from "multer";
 import { v4 as uuidv4 } from "uuid";
 import path from "path";
 import fs from "fs";
+import cors from "cors"; // ✅ add this
 import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -10,6 +11,13 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = 3000;
+
+// ✅ Enable CORS for all routes
+app.use(cors({
+  origin: "*", // or specify your frontend URL instead of "*"
+  methods: ["GET", "POST"],
+  allowedHeaders: ["Content-Type"],
+}));
 
 // Ensure uploads folder exists
 if (!fs.existsSync(path.join(__dirname, "uploads"))) {
@@ -28,6 +36,12 @@ const upload = multer({ storage });
 
 app.use(express.static("public"));
 app.use("/uploads", express.static("uploads"));
+
+// ✅ Optional: explicitly set CORS headers for static files
+app.use("/uploads", (req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "*");
+  next();
+}, express.static("uploads"));
 
 app.post("/upload", upload.single("image"), (req, res) => {
   const fileUrl = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
