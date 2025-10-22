@@ -1,60 +1,60 @@
 import express from "express";
+import cors from "cors";
 import multer from "multer";
-import { v4 as uuidv4 } from "uuid";
 import path from "path";
 import fs from "fs";
-import cors from "cors";
 import { fileURLToPath } from "url";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import { v4 as uuidv4 } from "uuid";
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
-// 🔹 1. Enable CORS globally
-app.use(cors({
-  origin: "*",
-  methods: ["GET", "POST", "OPTIONS"],
-  allowedHeaders: ["Content-Type"],
-}));
+// Setup CORS
+app.use(
+  cors({
+    origin: "*", // or replace with ["http://localhost:5173", "https://yourdomain.com"]
+    methods: ["GET", "POST"],
+  })
+);
 
-// 🔹 2. Ensure uploads folder exists
-const uploadsPath = path.join(__dirname, "uploads");
-if (!fs.existsSync(uploadsPath)) fs.mkdirSync(uploadsPath);
+// Setup paths
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const uploadDir = path.join(__dirname, "uploads");
 
-// 🔹 3. Multer setup
+// Ensure uploads folder exists
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir);
+}
+
+// Setup multer for file uploads
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, uploadsPath),
-  filename: (req, file, cb) => {
+  destination: function (req, file, cb) {
+    cb(null, uploadDir);
+  },
+  filename: function (req, file, cb) {
     const ext = path.extname(file.originalname);
-    cb(null, uuidv4() + ext);
+    const fileName = uuidv4() + ext;
+    cb(null, fileName);
   },
 });
 const upload = multer({ storage });
 
-// 🔹 4. Manual static file serving with CORS headers
-app.get("/uploads/:file", (req, res) => {
-  const filePath = path.join(uploadsPath, req.params.file);
-  if (fs.existsSync(filePath)) {
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
-    res.sendFile(filePath);
-  } else {
-    res.status(404).send("File not found");
-  }
-});
-
-// 🔹 5. Upload route
+// Upload endpoint
 app.post("/upload", upload.single("image"), (req, res) => {
-  const fileUrl = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
-  res.send(`
-    <h2>✅ Upload successful!</h2>
-    <p><a href="${fileUrl}" target="_blank">${fileUrl}</a></p>
-    <img src="${fileUrl}" width="300" />
-  `);
+  if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+  const imageUrl = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
+  res.json({ url: imageUrl });
 });
 
-app.listen(PORT, () =>
-  console.log(`🚀 Server running at http://localhost:${PORT}`)
-);
+// Serve uploaded images statically
+app.use("/uploads", express.static(uploadDir));
+
+// Root route
+app.get("/", (req, res) => {
+  res.send("Image Share API is running 🚀");
+});
+
+app.listen(PORT, () => {
+  console.log(`✅ Server running on http://localhost:${PORT}`);
+});
