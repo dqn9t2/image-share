@@ -1,55 +1,85 @@
 import express from "express";
-import cors from "cors";
 import multer from "multer";
+import cors from "cors";
 import path from "path";
-import fs from "fs";
 import { fileURLToPath } from "url";
+import fs from "fs";
 import { v4 as uuidv4 } from "uuid";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Setup CORS (allow frontend apps to call API)
+// enable CORS for all requests
 app.use(
   cors({
-    origin: "*", // change to your domain if needed
+    origin: "*", // allow all origins
     methods: ["GET", "POST"],
+    allowedHeaders: ["Content-Type"],
   })
 );
 
-// Resolve paths
+// create uploads folder if not exist
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-// Ensure uploads folder exists
 const uploadDir = path.join(__dirname, "uploads");
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir);
-}
+if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir);
 
-// Setup multer for file upload
+// serve static files (images)
+app.use("/uploads", express.static(uploadDir, { setHeaders: (res) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+}}));
+
+// setup multer for image upload
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, uploadDir),
-  filename: (req, file, cb) => cb(null, uuidv4() + path.extname(file.originalname)),
+  destination: (req, file, cb) => cb(null, "uploads/"),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    cb(null, uuidv4() + ext);
+  },
 });
 const upload = multer({ storage });
 
-// Serve static frontend UI
-app.use(express.static(path.join(__dirname, "public")));
+// homepage with upload form
+app.get("/", (req, res) => {
+  res.send(`
+    <html>
+      <head>
+        <title>Image Share</title>
+        <style>
+          body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; margin-top: 80px; }
+          form { display: flex; flex-direction: column; gap: 10px; width: 300px; border: 1px solid #ccc; padding: 20px; border-radius: 10px; }
+          input[type=file], button { padding: 10px; }
+        </style>
+      </head>
+      <body>
+        <h2>Upload Image</h2>
+        <form id="uploadForm" enctype="multipart/form-data">
+          <input type="file" name="image" accept="image/*" required />
+          <button type="submit">Upload</button>
+        </form>
+        <p id="link"></p>
 
-// Serve uploaded images
-app.use("/uploads", express.static(uploadDir));
+        <script>
+          const form = document.getElementById('uploadForm');
+          form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const data = new FormData(form);
+            const res = await fetch('/upload', { method: 'POST', body: data });
+            const json = await res.json();
+            document.getElementById('link').innerHTML = 
+              '<a href="' + json.url + '" target="_blank">' + json.url + '</a>';
+          });
+        </script>
+      </body>
+    </html>
+  `);
+});
 
-// Upload API endpoint
+// upload endpoint
 app.post("/upload", upload.single("image"), (req, res) => {
-  if (!req.file) return res.status(400).json({ error: "No file uploaded" });
   const imageUrl = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
   res.json({ url: imageUrl });
 });
 
-// Default route
-app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "index.html"));
-});
-
-app.listen(PORT, () => console.log(`✅ Server running at http://localhost:${PORT}`));
+// start server
+app.listen(PORT, () => console.log(`🚀 Image Share API running at http://localhost:${PORT}`));
