@@ -9,14 +9,16 @@ import { v4 as uuidv4 } from "uuid";
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// enable CORS for all requests
-app.use(
-  cors({
-    origin: "*", // allow all origins
-    methods: ["GET", "POST"],
-    allowedHeaders: ["Content-Type"],
-  })
-);
+// Enable global CORS (all routes + static)
+app.use((req, res, next) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  next();
+});
+
+// handle preflight OPTIONS request
+app.options("*", (req, res) => res.sendStatus(200));
 
 // create uploads folder if not exist
 const __filename = fileURLToPath(import.meta.url);
@@ -24,14 +26,19 @@ const __dirname = path.dirname(__filename);
 const uploadDir = path.join(__dirname, "uploads");
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir);
 
-// serve static files (images)
-app.use("/uploads", express.static(uploadDir, { setHeaders: (res) => {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-}}));
+// serve static files with CORS headers
+app.use(
+  "/uploads",
+  express.static(uploadDir, {
+    setHeaders: (res) => {
+      res.setHeader("Access-Control-Allow-Origin", "*");
+    },
+  })
+);
 
 // setup multer for image upload
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, "uploads/"),
+  destination: (req, file, cb) => cb(null, uploadDir),
   filename: (req, file, cb) => {
     const ext = path.extname(file.originalname);
     cb(null, uuidv4() + ext);
@@ -82,4 +89,4 @@ app.post("/upload", upload.single("image"), (req, res) => {
 });
 
 // start server
-app.listen(PORT, () => console.log(`🚀 Image Share API running at http://localhost:${PORT}`));
+app.listen(PORT, () => console.log(`🚀 Image Share running at http://localhost:${PORT}`));
